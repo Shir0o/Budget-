@@ -245,6 +245,12 @@ Map<String, Map<String, Object?>> _examples(_Seed seed) => {
     'categoryId': seed.groceries,
     'business': 'personal',
   },
+  'retag_line': {
+    'transactionId': seed.reviewed,
+    'lineId': seed.state.transaction(seed.reviewed)!.lines.single.id,
+    'business': 'business',
+    'businessTag': 'Meals',
+  },
   'mark_imported_reviewed': <String, Object?>{},
 };
 
@@ -452,6 +458,40 @@ void main() {
         seed.state.transaction(seed.reviewed)!.lines.single.category,
         seed.dining,
       );
+    });
+
+    test('retag_line changes a Reviewed line, which stays Reviewed', () async {
+      final seed = _Seed();
+      final lineId = seed.state.transaction(seed.reviewed)!.lines.single.id;
+      final result = await _call(seed, 'retag_line', {
+        'transactionId': seed.reviewed,
+        'lineId': lineId,
+        'business': 'business',
+        'businessTag': 'Meals',
+      });
+      expect(result.isError, isFalse, reason: result.text);
+      var line = seed.state.transaction(seed.reviewed)!.lines.single;
+      expect(line.business, const Business('Meals'));
+      expect(line.category, seed.dining);
+      expect(line.reviewed, isTrue);
+
+      // A gift on a Reviewed line needs a recipient.
+      final gift = await _call(seed, 'retag_line', {
+        'transactionId': seed.reviewed,
+        'lineId': lineId,
+        'business': 'business',
+        'businessTag': 'Gifts',
+      });
+      expect(gift.isError, isTrue);
+      expect(gift.content['error'], contains('recipient'));
+      line = seed.state.transaction(seed.reviewed)!.lines.single;
+      expect(line.business, const Business('Meals'));
+
+      final missing = await _call(seed, 'retag_line', {
+        'transactionId': seed.reviewed,
+        'lineId': lineId,
+      });
+      expect(missing.isError, isTrue);
     });
 
     test('update_transaction changes a one-line amount', () async {
@@ -662,6 +702,7 @@ void main() {
           'rename_category',
           'archive_category',
           'suggest_review',
+          'retag_line',
           'mark_imported_reviewed',
           'revert_change',
         ]),

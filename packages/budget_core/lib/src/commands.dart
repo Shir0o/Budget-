@@ -236,6 +236,28 @@ final class SuggestReview extends Command {
   final String? recipient;
 }
 
+/// Changes one line's business status, and a gift's recipient, when the
+/// person asks for it outside the app, such as in an AI chat (ADR 0003,
+/// amended). Unlike [SuggestReview] it works on a Reviewed line, which
+/// stays Reviewed; its Category and Review state never change. A Reviewed
+/// line can't be left needing something, so a gift on one needs a
+/// recipient.
+final class RetagLine extends Command {
+  const RetagLine({
+    required this.transactionId,
+    required this.lineId,
+    required this.business,
+    this.recipient,
+  });
+
+  final String transactionId;
+  final String lineId;
+  final BusinessStatus business;
+
+  /// For a gift. Null keeps the line's own recipient.
+  final String? recipient;
+}
+
 /// Marks Reviewed, as one change, every Unreviewed line in the Review
 /// queue that a one-time import brought in and that needs nothing more
 /// (`reviewNeed` is null). For a budget imported before imports arrived
@@ -695,8 +717,8 @@ enum Rejection {
   /// the app instead.
   alreadyReviewed,
 
-  /// [SuggestReview] of a transfer line: a transfer isn't spending, so Review
-  /// never asks about it.
+  /// [SuggestReview] or [RetagLine] of a transfer line: a transfer isn't
+  /// spending, so Review never asks about it.
   transferNotReviewable,
 
   /// [ConfirmBankMatch] or [RejectBankMatch] of a transaction that isn't
