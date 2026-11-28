@@ -258,6 +258,45 @@ final class RetagLine extends Command {
   final String? recipient;
 }
 
+/// One part of a [SplitLine].
+final class LinePart {
+  const LinePart({
+    required this.amount,
+    required this.business,
+    this.recipient,
+    this.memo,
+  });
+
+  /// Same sign as the line, and not 0.00.
+  final Money amount;
+  final BusinessStatus business;
+
+  /// For a gift part.
+  final String? recipient;
+
+  /// Null keeps the line's memo.
+  final String? memo;
+}
+
+/// Splits one line into [parts] when the person asks for it outside the
+/// app, such as in an AI chat (ADR 0003, amended). Every part keeps the
+/// line's Category and Review state, and the first keeps its id. The parts
+/// must add up to the line's amount. A Reviewed line can't be left needing
+/// something, so on one each gift part needs a recipient.
+final class SplitLine extends Command {
+  const SplitLine({
+    required this.transactionId,
+    required this.lineId,
+    required this.parts,
+  });
+
+  final String transactionId;
+  final String lineId;
+
+  /// Two or more.
+  final List<LinePart> parts;
+}
+
 /// Marks Reviewed, as one change, every Unreviewed line in the Review
 /// queue that a one-time import brought in and that needs nothing more
 /// (`reviewNeed` is null). For a budget imported before imports arrived
@@ -744,6 +783,12 @@ enum Rejection {
 
   /// [ReviewLine] of a gift line without a recipient.
   recipientRequired,
+
+  /// [SplitLine] into fewer than two parts.
+  splitNeedsTwoParts,
+
+  /// A [SplitLine] part of 0.00, or with the opposite sign to its line.
+  splitPartSign,
 
   /// [Reconcile] when the cleared balance differs from the bank's and no
   /// adjustment was asked for.

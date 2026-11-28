@@ -125,6 +125,28 @@ const _line = {
   'additionalProperties': false,
 };
 
+const _part = {
+  'type': 'object',
+  'properties': {
+    'amountCents': {
+      'type': 'integer',
+      'description': 'Whole cents, with the same sign as the line.',
+    },
+    'business': {
+      'type': 'string',
+      'enum': ['personal', 'business'],
+    },
+    'businessTag': {'type': 'string'},
+    'recipient': {'type': 'string', 'description': 'For a gift part.'},
+    'memo': {
+      'type': 'string',
+      'description': 'Left out, the part keeps the line’s memo.',
+    },
+  },
+  'required': ['amountCents', 'business'],
+  'additionalProperties': false,
+};
+
 /// Ticket 13's write tools, in its order. `revert_change` undoes one group
 /// MCP itself wrote. No tool deletes anything, and the only one that marks
 /// lines Reviewed is `mark_imported_reviewed`, for lines a one-time import
@@ -369,6 +391,24 @@ final writeTools = <WriteTool>[
     build: _retagLine,
   ),
   WriteTool(
+    name: 'split_line',
+    description:
+        'Splits one line into two or more parts when the person asks for it, '
+        'for example a gift for two people. Each part has its own amount, '
+        'Personal or Business status and, for a gift, recipient; the parts '
+        'must add up to the line’s amount. Every part keeps the line’s '
+        'Category, and a Reviewed line’s parts stay Reviewed, so each gift '
+        'part on one needs a recipient.',
+    arguments: {
+      'budgetId': BudgetTools._budgetId,
+      'transactionId': {'type': 'string'},
+      'lineId': {'type': 'string'},
+      'parts': {'type': 'array', 'items': _part, 'minItems': 2},
+    },
+    required: ['budgetId', 'transactionId', 'lineId', 'parts'],
+    build: _splitLine,
+  ),
+  WriteTool(
     name: 'mark_imported_reviewed',
     description:
         'Marks Reviewed, as one change, every Unreviewed line that a one-time '
@@ -546,6 +586,42 @@ Command _retagLine(ToolRequest request, CalendarMonth thisMonth) => RetagLine(
   recipient: request.text('recipient'),
 );
 
+Command _splitLine(ToolRequest request, CalendarMonth thisMonth) {
+  final parts = request.arguments['parts'];
+  if (parts is! List || parts.length < 2) {
+    throw const _Refusal('“parts” must be two or more parts.');
+  }
+  return SplitLine(
+    transactionId: request.requireString('transactionId'),
+    lineId: request.requireString('lineId'),
+    parts: [
+      for (final part in parts)
+        switch (part) {
+          final Map value => _linePart(value.cast<String, Object?>()),
+          _ => throw const _Refusal('Each part must be an object.'),
+        },
+    ],
+  );
+}
+
+LinePart _linePart(Map<String, Object?> part) {
+  final line = _lineInput(part);
+  return LinePart(
+    amount: line.amount,
+    business:
+        line.business ??
+        (throw const _Refusal(
+          'Each part needs “business”: personal or business.',
+        )),
+    recipient: line.recipient,
+    memo: switch (part['memo']) {
+      final String memo => memo,
+      null => null,
+      _ => throw const _Refusal('“memo” must be text.'),
+    },
+  );
+}
+
 Command _revertChange(ToolRequest request, CalendarMonth thisMonth) =>
     RevertGroup(groupId: request.requireString('groupId'));
 
@@ -637,9 +713,16 @@ String _rejection(Rejection reason) => switch (reason) {
   Rejection.zeroAmount =>
     'An amount can’t be 0.00. To remove a transaction, delete it in the app.',
   Rejection.noLines => 'Give at least one line.',
+  Rejection.splitNeedsTwoParts => 'Give two or more parts.',
+  Rejection.splitPartSign =>
+    'Each part needs an amount with the same sign as the line, and not 0.00.',
+  Rejection.transferCannotSplit => 'A transfer can’t be split.',
+  Rejection.businessStatusRequired =>
+    'Each part on a Reviewed line needs everything a review asks for.',
   Rejection.splitDoesNotSum =>
-    'The lines must add up to the amount. To change a split’s amount, use '
-        'split_transaction with every line.',
+    'The lines must add up to the amount: for split_line, the line’s '
+        'amount. To change a split’s amount, use split_transaction with every '
+        'line.',
   Rejection.amountMustBePositive => 'The amount must be more than zero.',
   Rejection.incomeMustBePositive => 'Income must be more than zero.',
   Rejection.sameCategory => 'Choose two different Categories.',

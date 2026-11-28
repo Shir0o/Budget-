@@ -290,6 +290,8 @@ CommandResult _decide(Command command, BudgetState state, _Stamp stamp) {
 
     case RetagLine():
       return _retagLine(command, state, stamp);
+    case SplitLine():
+      return _splitLine(command, state, stamp);
 
     case MarkImportedReviewed():
       return _markImportedReviewed(state, stamp);
@@ -881,6 +883,93 @@ CommandResult _retagLine(RetagLine command, BudgetState state, _Stamp stamp) {
       'lines': [
         for (final other in transaction.lines)
           stored(other.id == line.id ? retagged : other),
+      ],
+    }),
+  ]);
+}
+
+/// Splits a line into parts, each keeping its Category and Review state
+/// (ADR 0003, amended).
+CommandResult _splitLine(SplitLine command, BudgetState state, _Stamp stamp) {
+  final transaction = state.transaction(command.transactionId);
+  if (transaction == null) {
+    return const Rejected(Rejection.unknownTransaction);
+  }
+  if (transaction.isTransfer) {
+    return const Rejected(Rejection.transferCannotSplit);
+  }
+  final line = transaction.lines
+      .where((line) => line.id == command.lineId)
+      .firstOrNull;
+  if (line == null) return const Rejected(Rejection.unknownLine);
+  if (command.parts.length < 2) {
+    return const Rejected(Rejection.splitNeedsTwoParts);
+  }
+  final parts = <TransactionLine>[];
+  for (final (index, part) in command.parts.indexed) {
+    if (part.amount.cents == 0 ||
+        part.amount.cents.isNegative != line.amount.cents.isNegative) {
+      return const Rejected(Rejection.splitPartSign);
+    }
+    final business = switch (part.business) {
+      Business(:final tag) => Business(tag.trim()),
+      final other => other,
+    };
+    if (business case Business(:final tag) when tag.isEmpty) {
+      return const Rejected(Rejection.businessTagRequired);
+    }
+    final recipient = business == const Business(giftsTag)
+        ? switch (part.recipient?.trim()) {
+            '' => null,
+            final recipient => recipient,
+          }
+        : null;
+    final memo = part.memo?.trim() ?? line.memo;
+    if (_checkText([recipient, memo]) case final rejected?) return rejected;
+    if (line.reviewed &&
+        reviewNeed(
+              category: line.category,
+              business: business,
+              recipient: recipient,
+            ) !=
+            null) {
+      return Rejected(
+        business == const Business(giftsTag) && recipient == null
+            ? Rejection.recipientRequired
+            : Rejection.businessStatusRequired,
+      );
+    }
+    parts.add(
+      TransactionLine(
+        id: index == 0 ? line.id : newId(),
+        amount: part.amount,
+        category: line.category,
+        business: business,
+        memo: memo,
+        recipient: recipient,
+        note: index == 0 ? line.note : null,
+        reviewed: line.reviewed,
+      ),
+    );
+  }
+  final sum = parts.fold(0, (sum, part) => sum + part.amount.cents);
+  if (sum != line.amount.cents) {
+    return const Rejected(Rejection.splitDoesNotSum);
+  }
+  Map<String, Object?> stored(TransactionLine line) => {
+    ..._storedLine(line),
+    'note': ?line.note,
+  };
+  return Accepted([
+    stamp.event(EventType.transactionSplitSet, {
+      'transactionId': transaction.id,
+      'amountCents': transaction.amount.cents,
+      'lines': [
+        for (final other in transaction.lines)
+          if (other.id == line.id)
+            for (final part in parts) stored(part)
+          else
+            stored(other),
       ],
     }),
   ]);
