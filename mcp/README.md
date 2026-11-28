@@ -50,6 +50,23 @@ You need Node 20 or newer and the Dart SDK (the build compiles the budget logic 
    The Worker works out its own address from each request. To pin it, for example on a custom domain, add `"PUBLIC_URL": "https://<your address>"` under `vars` in `wrangler.jsonc`.
 7. **Connect an AI app.** Add a custom connector (in Claude: *Settings › Connectors › Add custom connector*) with the address `https://<your worker>/mcp`. It opens a page on your Worker that asks for `MCP_ACCESS_PASSWORD`. If the server is in read-write mode, that page also asks whether this app may make changes.
 
+## Daily order-email check (optional)
+
+Once a day at 15:00 UTC the Worker can look in your Gmail for new order confirmations from Amazon, Walmart and AliExpress, read each order's number, items and total with plain code (no AI), and leave them as offers in a sealed file in its own Drive folder. Under *Settings › Store item names* the app matches them to bank lines by store, amount and date, and nothing changes until you tap *Add item names* or *Split by item*. It reads the last 3 days each time; set `"ORDER_EMAIL_DAYS"` under `vars` (1 to 30) to look further back. Newer Amazon emails name only the items' departments, so those orders show as, say, "Toys & Games, Books".
+
+To turn it on:
+
+1. In the Google Cloud console for the same project, enable the **Gmail API** (*APIs & Services › Library*).
+2. In the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground), with your own credentials as in step 4 of Set up, authorize only `https://www.googleapis.com/auth/gmail.readonly`, sign in with the Gmail account the orders go to, and copy the refresh token. This is read-only: the Worker can't send, change or delete mail. The same *In production* note applies, or the token stops working after 7 days.
+3. Store it and deploy:
+   ```sh
+   npx wrangler secret put GMAIL_REFRESH_TOKEN
+   npm run deploy
+   ```
+4. The first check runs at the next 15:00 UTC. Its one-line outcome shows in the Cloudflare dashboard under *Workers › budget-mcp › Logs*; no email text is logged.
+
+To turn it off, `npx wrangler secret delete GMAIL_REFRESH_TOKEN` and revoke the token at [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
 ## Read-write mode
 
 Set `"MCP_MODE": "read-write"` in `wrangler.jsonc` and deploy. AI apps you approved before stay read-only until you connect them again and tick *Allow changes*.

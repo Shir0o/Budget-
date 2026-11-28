@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:budget/screens/store_orders_screen.dart';
 import 'package:budget/services.dart';
 import 'package:budget_core/budget_core.dart';
+import 'package:budget_migration/budget_migration.dart';
+import 'package:budget_sync/budget_sync.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -81,6 +83,54 @@ Content-Type: text/html; charset=UTF-8
 ''';
 
 void main() {
+  testWidgets('offers orders the daily Gmail check left in Drive', (
+    tester,
+  ) async {
+    final engine = _engine();
+    final services = AppServices.inMemory();
+    final budgetId = engine.state.budget!.id;
+    await tester.runAsync(() async {
+      await services.prefs.writeSyncBook(
+        budgetId,
+        const SyncBook(enabled: true),
+      );
+      final error = await SyncClient(drive: services.drive).writeOrderOffers(
+        budgetId: budgetId,
+        deviceId: 'cloud-mcp',
+        key: await services.keys.keyFor(budgetId),
+        body: {
+          'deviceId': 'cloud-mcp',
+          'checkedAt': '2026-11-07T15:00:00Z',
+          'charges': [
+            StoreCharge(
+              store: Store.walmart,
+              orderId: '2000000-33333333',
+              date: CivilDate(2026, 11, 5),
+              items: const [
+                StoreItem(name: 'Sample Paper Towels', amount: Money.zero),
+              ],
+              total: const Money(1400),
+            ).toJson(),
+          ],
+        },
+      );
+      expect(error, isNull);
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StoreOrdersScreen(engine: engine, services: services),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('From your daily Gmail check'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('store-add-names')));
+    await tester.pumpAndSettle();
+    expect(_line(engine).memo, 'Sample Paper Towels');
+  });
+
   testWidgets('order emails add names to a Reviewed line', (tester) async {
     final engine = _engine();
     final line = _line(engine);

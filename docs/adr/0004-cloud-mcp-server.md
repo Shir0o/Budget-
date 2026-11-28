@@ -26,6 +26,7 @@ An **opt-in** Cloudflare Worker (`mcp/`) that joins the budget's Drive sync as o
 - Answers are only as fresh as the last sync from the phone or Mac.
 - Replaying the whole log on every call costs CPU: about 1.5 s for a made-up budget of 10,000 transactions, more for a write. That needs Workers Paid (the free plan allows 10 ms per request). Snapshots keep the number of files small.
 - Two writes at the same moment can both upload a segment with the same number. Both are read and merged by Event id, so nothing is lost.
+- Amended for issue 4: an optional daily cron reads new Amazon, Walmart and AliExpress order emails through the Gmail API with a second refresh token, limited to `gmail.readonly`, and keeps the orders it reads, sealed with the Budget Key, in an `orders.json` file in its own Drive folder for 120 days. That file holds no Events, so sync and join pass over it. The app matches those orders to bank lines and a person applies each one (ADR 0003); the Worker never changes the budget from an email. Gmail access means the Cloudflare account can also read that mailbox while the token is stored.
 - `budget_sync`'s `dart:io` transport moved to its own file, and `budget_sync/core.dart` and `budget_mcp/tools.dart` export the parts that also compile to JavaScript.
 
 ## Alternatives rejected

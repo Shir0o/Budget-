@@ -11,6 +11,7 @@ environment:
 dependencies:
   budget_core: any
   budget_mcp: any
+  budget_migration: any
   budget_sync: any
   cryptography: ^2.9.0
 

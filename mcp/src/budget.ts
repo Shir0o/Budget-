@@ -47,3 +47,12 @@ export async function callTool(
 ): Promise<{ text: string; isError: boolean }> {
   return ask({ method: "call", config: config(env), accessToken, name, arguments: args, client });
 }
+
+/** Reads raw order emails into the order offers the app matches (issue 4). */
+export async function checkOrders(
+  env: Env,
+  accessToken: string,
+  messages: string[],
+): Promise<{ text: string; isError: boolean }> {
+  return ask({ method: "orders", config: config(env), accessToken, messages });
+}

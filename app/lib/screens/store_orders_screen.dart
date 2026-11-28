@@ -1,5 +1,6 @@
 import 'package:budget_core/budget_core.dart';
 import 'package:budget_migration/budget_migration.dart';
+import 'package:budget_sync/budget_sync.dart';
 import 'package:flutter/material.dart';
 
 import '../services.dart';
@@ -32,9 +33,43 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
   List<StoreCharge>? _charges;
   final _applied = <String>{};
   var _busy = false;
+  var _fromGmail = false;
   var _error = '';
 
   BudgetState get _state => widget.engine.state;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGmailOffers();
+  }
+
+  /// Loads the orders the cloud server's daily Gmail check left in Drive,
+  /// when this budget syncs. Quietly does nothing otherwise.
+  Future<void> _loadGmailOffers() async {
+    final budget = _state.budget;
+    if (budget == null) return;
+    final services = widget.services;
+    try {
+      if (!(await services.prefs.readSyncBook(budget.id)).enabled) return;
+      final bodies = await SyncClient(drive: services.drive).readOrderOffers(
+        budgetId: budget.id,
+        key: await services.keys.keyFor(budget.id),
+      );
+      final charges = [
+        for (final body in bodies)
+          for (final json in body['charges'] as List? ?? const [])
+            ?StoreCharge.fromJson(json),
+      ];
+      if (charges.isEmpty || !mounted || _charges != null) return;
+      setState(() {
+        _charges = charges;
+        _fromGmail = true;
+      });
+    } on Exception {
+      // Drive isn't reachable now; the file buttons still work.
+    }
+  }
 
   List<StoreMatch> get _matches => [
     for (final match in matchStoreOrders(_state, _charges ?? const []))
@@ -64,6 +99,7 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
       if (mounted) {
         setState(() {
           _charges = charges;
+          _fromGmail = false;
           _applied.clear();
         });
       }
@@ -200,6 +236,7 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
                     )
                   else ...[
                     Text(
+                      '${_fromGmail ? 'From your daily Gmail check: ' : ''}'
                       '${charges.length} orders read · '
                       '${matches.length} match a bank line',
                       key: const ValueKey('store-summary'),

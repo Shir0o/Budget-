@@ -3,6 +3,7 @@ import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { authorize } from "./authorize";
 import { type Env, READ_SCOPE, WRITE_SCOPE } from "./env";
 import { handleMcp, type McpContext } from "./mcp";
+import { checkOrderEmails } from "./orders";
 
 let provider: OAuthProvider<Env> | undefined;
 let providerFor: string | undefined;
@@ -46,5 +47,15 @@ function oauth(origin: string): OAuthProvider<Env> {
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     return oauth(originOf(request, env)).fetch(request, env, ctx);
+  },
+  // The daily order-email check (wrangler.jsonc's cron). It logs only its
+  // one-line outcome, never an email.
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      checkOrderEmails(env).then(
+        (outcome) => console.log(`order emails: ${outcome}`),
+        (error) => console.error(`order emails: ${error instanceof Error ? error.message : "failed"}`),
+      ),
+    );
   },
 } satisfies ExportedHandler<Env>;

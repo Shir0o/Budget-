@@ -44,4 +44,24 @@ assert.equal(unreviewed.body.lines[0].needs, "businessStatus", "its Category cam
 const refused = await call("assign", { categoryId: fixture.categoryId, amountCents: 100 });
 assert.equal(refused.isError, true);
 
+// The daily order-email check: a made-up Amazon email becomes an offer in
+// Drive, and the budget itself doesn't change.
+const email = [
+  "From: auto-confirm@amazon.com",
+  'Subject: Ordered: "Sample Notebook"',
+  "Date: Tue, 10 Nov 2026 08:00:00 +0000",
+  "Content-Type: text/plain; charset=UTF-8",
+  "",
+  "Order #",
+  "111-0000001-0000001",
+  "* Sample Notebook",
+  "  10.00 USD",
+  "Grand Total:",
+  "10.83 USD",
+].join("\n");
+const orders = await ask({ method: "orders", messages: [email] });
+assert.equal(orders.isError, false, orders.text);
+assert.match(orders.text, /found 1 orders/);
+assert.equal((await call("list_unreviewed", {})).body.lines.length, 1);
+
 console.log("smoke: ok");

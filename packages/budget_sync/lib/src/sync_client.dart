@@ -505,6 +505,73 @@ final class SyncClient {
     }
   }
 
+  /// The sealed file a cloud server keeps order offers in, inside its own
+  /// device folder. It holds no Events, so sync and join pass over it.
+  static const orderOffersFile = 'orders.json';
+
+  /// Replaces [deviceId]'s order offers with [body], sealed with [key].
+  /// Returns why it failed, or null.
+  Future<String?> writeOrderOffers({
+    required String budgetId,
+    required String deviceId,
+    required BudgetKey key,
+    required Map<String, Object?> body,
+  }) async {
+    try {
+      final budgetFolder = await _folder(budgetId, null);
+      final folder = await _folder(deviceId, budgetFolder);
+      final old = [
+        for (final file in await drive.list(folder))
+          if (file.name == orderOffersFile) file,
+      ];
+      await _write(budgetId, deviceId, folder, orderOffersFile, body, key);
+      // Delete the old copies only once the new one is in, so a failed
+      // upload never loses the offers.
+      for (final file in old) {
+        await drive.delete(file.id);
+      }
+      return null;
+    } on DriveException catch (error) {
+      return error.message;
+    } on SyncException catch (error) {
+      return error.message;
+    }
+  }
+
+  /// Every device's order offers, as the bodies [writeOrderOffers] sealed;
+  /// where a device has two files, the one whose `checkedAt` is later.
+  /// Empty when there are none.
+  Future<List<Map<String, Object?>>> readOrderOffers({
+    required String budgetId,
+    required BudgetKey key,
+  }) async {
+    final budgetFolder = await _find(budgetId, null);
+    if (budgetFolder == null) return const [];
+    final bodies = <Map<String, Object?>>[];
+    for (final folder in await drive.list(budgetFolder.id)) {
+      if (!folder.isFolder) continue;
+      final files = [
+        for (final file in await drive.list(folder.id))
+          if (file.name == orderOffersFile) file,
+      ];
+      Map<String, Object?>? newest;
+      for (final file in files) {
+        final body = await SealedFile.open(
+          name: _name(budgetId, folder.name, orderOffersFile),
+          file: await drive.download(file.id),
+          key: key,
+        );
+        final at = body['checkedAt'] as String? ?? '';
+        if (newest == null ||
+            at.compareTo(newest['checkedAt'] as String? ?? '') > 0) {
+          newest = body;
+        }
+      }
+      if (newest != null) bodies.add(newest);
+    }
+    return bodies;
+  }
+
   /// The folder called [name] under [parent], made when it isn't there yet.
   Future<String> _folder(String name, String? parent) async =>
       (await _find(name, parent))?.id ??
