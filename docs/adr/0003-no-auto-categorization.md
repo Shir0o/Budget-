@@ -16,6 +16,8 @@ Nothing assigns a category or business status without a person's tap. The app ma
 
 **Amended a third time 2026-11-28:** the MCP write tool `retag_line` (offered only in read-write mode, and on the cloud server only when `MCP_WRITE_TOOLS` names it) changes one line's business status, and a gift's recipient, when the person asks for it in an AI chat. It never changes a Category and never changes whether a line is Reviewed: a Reviewed line stays Reviewed, because the person chose the new value, and an Unreviewed one still waits for their tap. A Reviewed line can't be left needing something, so a gift on one needs a recipient. Each retag is one change in Change History that the person can revert.
 
+**Amended a fourth time 2026-11-28:** the MCP write tool `split_line`, offered the same way, splits one line into two or more parts when the person asks for it in an AI chat, each with its own amount, business status and gift recipient. Every part keeps the line's Category and Review state, as with `retag_line`, so on a Reviewed line each part must need nothing more. Each split is one change the person can revert.
+
 ## Consequences
 
 - More taps per transaction. This is by design: review is part of the product.

@@ -810,6 +810,124 @@ void main() {
     });
   });
 
+  group('SplitLine (ADR 0003, amended)', () {
+    const mcp = Actor.fromValue('mcp:test');
+    const gift = Business(giftsTag);
+
+    test('splits a Reviewed line into Reviewed parts', () {
+      final budget = _Budget();
+      final id = budget.spend(
+        1723,
+        category: budget.diningOut,
+        business: const Business('Other business expense'),
+      );
+      final original = budget.line(id);
+
+      budget.run(
+        SplitLine(
+          transactionId: id,
+          lineId: original.id,
+          parts: const [
+            LinePart(amount: Money(-862), business: gift, recipient: ' Sam '),
+            LinePart(amount: Money(-861), business: gift, recipient: 'Ari'),
+          ],
+        ),
+        mcp,
+      );
+
+      final lines = budget.state.transaction(id)!.lines;
+      expect(lines.map((line) => line.amount), const [
+        Money(-862),
+        Money(-861),
+      ]);
+      expect(lines.map((line) => line.recipient), ['Sam', 'Ari']);
+      expect(lines.first.id, original.id);
+      expect(lines.every((line) => line.category == budget.diningOut), isTrue);
+      expect(lines.every((line) => line.reviewed), isTrue);
+      expect(budget.state.reviewQueue, isEmpty);
+    });
+
+    test('refuses parts that leave a Reviewed line needing something', () {
+      final budget = _Budget();
+      final id = budget.spend(
+        1000,
+        category: budget.diningOut,
+        business: const Personal(),
+      );
+      final lineId = budget.line(id).id;
+      SplitLine split(List<LinePart> parts) =>
+          SplitLine(transactionId: id, lineId: lineId, parts: parts);
+
+      expect(
+        _rejected(
+          budget.execute(
+            split(const [
+              LinePart(amount: Money(-500), business: gift),
+              LinePart(amount: Money(-500), business: Personal()),
+            ]),
+            mcp,
+          ),
+        ),
+        Rejection.recipientRequired,
+      );
+      expect(
+        _rejected(
+          budget.execute(
+            split(const [
+              LinePart(amount: Money(-600), business: Personal()),
+              LinePart(amount: Money(-500), business: Personal()),
+            ]),
+            mcp,
+          ),
+        ),
+        Rejection.splitDoesNotSum,
+      );
+      expect(
+        _rejected(
+          budget.execute(
+            split(const [
+              LinePart(amount: Money(-1100), business: Personal()),
+              LinePart(amount: Money(100), business: Personal()),
+            ]),
+            mcp,
+          ),
+        ),
+        Rejection.splitPartSign,
+      );
+      expect(
+        _rejected(
+          budget.execute(
+            split(const [LinePart(amount: Money(-1000), business: Personal())]),
+            mcp,
+          ),
+        ),
+        Rejection.splitNeedsTwoParts,
+      );
+      expect(budget.state.transaction(id)!.lines, hasLength(1));
+    });
+
+    test('keeps an Unreviewed line\'s parts Unreviewed', () {
+      final budget = _Budget();
+      final id = budget.spend(1000, actor: Actor.bankSync);
+
+      budget.run(
+        SplitLine(
+          transactionId: id,
+          lineId: budget.line(id).id,
+          parts: const [
+            LinePart(amount: Money(-400), business: Personal()),
+            LinePart(amount: Money(-600), business: Personal(), memo: 'x'),
+          ],
+        ),
+        mcp,
+      );
+
+      final lines = budget.state.transaction(id)!.lines;
+      expect(lines.every((line) => !line.reviewed), isTrue);
+      expect(lines.last.memo, 'x');
+    });
+  });
+
   group('RetagLine (ADR 0003, amended)', () {
     RetagLine retag(
       _Budget budget,

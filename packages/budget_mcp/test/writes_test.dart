@@ -251,6 +251,14 @@ Map<String, Map<String, Object?>> _examples(_Seed seed) => {
     'business': 'business',
     'businessTag': 'Meals',
   },
+  'split_line': {
+    'transactionId': seed.reviewed,
+    'lineId': seed.state.transaction(seed.reviewed)!.lines.single.id,
+    'parts': [
+      {'amountCents': -200, 'business': 'personal'},
+      {'amountCents': -150, 'business': 'business', 'businessTag': 'Meals'},
+    ],
+  },
   'mark_imported_reviewed': <String, Object?>{},
 };
 
@@ -494,6 +502,59 @@ void main() {
       expect(missing.isError, isTrue);
     });
 
+    test(
+      'split_line splits a Reviewed line, whose parts stay Reviewed',
+      () async {
+        final seed = _Seed();
+        final lineId = seed.state.transaction(seed.reviewed)!.lines.single.id;
+        final result = await _call(seed, 'split_line', {
+          'transactionId': seed.reviewed,
+          'lineId': lineId,
+          'parts': [
+            {
+              'amountCents': -200,
+              'business': 'business',
+              'businessTag': 'Gifts',
+              'recipient': 'Sam',
+            },
+            {
+              'amountCents': -150,
+              'business': 'business',
+              'businessTag': 'Gifts',
+              'recipient': 'Ari',
+            },
+          ],
+        });
+        expect(result.isError, isFalse, reason: result.text);
+        final lines = seed.state.transaction(seed.reviewed)!.lines;
+        expect(lines.map((line) => line.amount.cents), [-200, -150]);
+        expect(lines.map((line) => line.recipient), ['Sam', 'Ari']);
+        expect(lines.first.id, lineId);
+        expect(lines.every((line) => line.category == seed.dining), isTrue);
+        expect(lines.every((line) => line.reviewed), isTrue);
+
+        final short = await _call(seed, 'split_line', {
+          'transactionId': seed.reviewed,
+          'lineId': lineId,
+          'parts': [
+            {'amountCents': -100, 'business': 'personal'},
+            {'amountCents': -50, 'business': 'personal'},
+          ],
+        });
+        expect(short.isError, isTrue);
+        expect(short.content['error'], contains('add up'));
+
+        final one = await _call(seed, 'split_line', {
+          'transactionId': seed.reviewed,
+          'lineId': lineId,
+          'parts': [
+            {'amountCents': -200, 'business': 'personal'},
+          ],
+        });
+        expect(one.isError, isTrue);
+      },
+    );
+
     test('update_transaction changes a one-line amount', () async {
       final seed = _Seed();
       final result = await _call(seed, 'update_transaction', {
@@ -703,6 +764,7 @@ void main() {
           'archive_category',
           'suggest_review',
           'retag_line',
+          'split_line',
           'mark_imported_reviewed',
           'revert_change',
         ]),
