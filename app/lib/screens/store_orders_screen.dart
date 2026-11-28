@@ -6,11 +6,13 @@ import '../services.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
-/// Store item names (issue 4): read an Amazon or Walmart order history
-/// export on the phone, match its orders to bank lines by store, amount and
-/// date, and offer the item names as a memo or as split lines. The file is
-/// read in memory and never kept; nothing is signed in to. Every offer waits
-/// for a tap, and every line it touches stays Unreviewed (ADR 0003).
+/// Store item names (issue 4): read an Amazon, Walmart or AliExpress order
+/// history export, or a Gmail Takeout export of their order emails, on the
+/// phone, match its orders to bank lines by store, amount and date, and
+/// offer the item names as a memo or as split lines. The file is read in
+/// memory and never kept; nothing is signed in to. Every offer waits for a
+/// tap. A Reviewed line only takes the names in its memo, and split lines
+/// stay Unreviewed (ADR 0003).
 class StoreOrdersScreen extends StatefulWidget {
   const StoreOrdersScreen({
     super.key,
@@ -39,7 +41,15 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
       if (!_applied.contains(match.transaction.id)) match,
   ];
 
-  Future<void> _choose() async {
+  Future<void> _choose() =>
+      _read(['csv', 'zip'], (bytes) => readStoreOrders(bytes, _store));
+
+  Future<void> _chooseEmails() => _read(['mbox', 'zip'], readOrderEmails);
+
+  Future<void> _read(
+    List<String> extensions,
+    List<StoreCharge> Function(List<int> bytes) read,
+  ) async {
     if (_busy) return;
     setState(() {
       _busy = true;
@@ -47,10 +57,10 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
     });
     try {
       final bytes = await widget.services.keepUnlocked(
-        () => widget.services.loader.pick(extensions: ['csv', 'zip']),
+        () => widget.services.loader.pick(extensions: extensions),
       );
       if (bytes == null) return;
-      final charges = readStoreOrders(bytes, _store);
+      final charges = read(bytes);
       if (mounted) {
         setState(() {
           _charges = charges;
@@ -77,6 +87,9 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
       EditTransaction(
         transactionId: match.transaction.id,
         memo: memo.isEmpty || memo.contains(names) ? names : '$memo; $names',
+        // The button says it only adds names to the memo, and the amount
+        // and lines stay as they were reconciled.
+        confirmReconciled: true,
       ),
     );
   }
@@ -159,6 +172,12 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
                     onPressed: _busy ? null : _choose,
                     child: Text('Choose ${_store.label} order history'),
                   ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    key: const ValueKey('store-choose-emails'),
+                    onPressed: _busy ? null : _chooseEmails,
+                    child: const Text('Choose order emails from Gmail'),
+                  ),
                   if (_error.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -174,8 +193,10 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
                     Hint(
                       'Download your order history from ${_store.label}'
                       '’s privacy or account page, then choose the CSV or '
-                      'zip here. The file stays on this phone and is not '
-                      'kept.',
+                      'zip here. Or label your Amazon, Walmart and '
+                      'AliExpress order emails in Gmail, export that label '
+                      'with Google Takeout and choose its .mbox or zip. The '
+                      'file stays on this phone and is not kept.',
                     )
                   else ...[
                     Text(
@@ -193,9 +214,7 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
                         state: _state,
                         match: match,
                         onAddNames: () => _addNames(match),
-                        onSplit:
-                            match.transaction.lines.length == 1 &&
-                                match.charge.items.length > 1
+                        onSplit: match.canSplit && match.charge.items.length > 1
                             ? () => _split(match)
                             : null,
                       ),
@@ -203,7 +222,8 @@ class _StoreOrdersScreenState extends State<StoreOrdersScreen> {
                     if (matches.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       const Hint(
-                        'Nothing changes until you tap. Split lines have no '
+                        'Nothing changes until you tap. A Reviewed line only '
+                        'takes the names in its memo. Split lines have no '
                         'Category yet and wait in Review like any other.',
                       ),
                     ],
@@ -292,10 +312,11 @@ class _MatchCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 14),
                   ),
                 ),
-                Text(
-                  formatSigned(-item.amount),
-                  style: amountStyle(fontSize: 14),
-                ),
+                if (item.amount.isPositive)
+                  Text(
+                    formatSigned(-item.amount),
+                    style: amountStyle(fontSize: 14),
+                  ),
               ],
             ),
           if (items.length > _shown)

@@ -75,7 +75,7 @@ Use Budget for new spending for about a week, alongside Actual.
 - [ ] Review every new line: categories, a few splits, a few Business Tags (with a recipient on
       a gift line).
 - [ ] Try the hint chip, edit a reviewed line, and revert one change from history.
-- [ ] Optional: try `Settings › Store item names` with an Amazon or Walmart order export.
+- [ ] Optional: try `Settings › Store item names` with an Amazon, Walmart or AliExpress order export, or a Gmail Takeout .mbox of order emails.
 - [ ] At the end of the week, compare account balances and Available with Actual again (step 3).
 
 **Pass:** the Review queue empties by hand only; balances still match Actual after the week.
