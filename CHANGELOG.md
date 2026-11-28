@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.0](https://github.com/Shir0o/Budget/compare/v1.5.0...v1.6.0) (2026-11-28)
+
+
+### Features
+
+* **mcp:** daily Gmail check leaves order offers for the app ([#44](https://github.com/Shir0o/Budget/issues/44)) ([56da87f](https://github.com/Shir0o/Budget/commit/56da87f7b4f4a7337d5edbcd0d664ad7bebe2fa2))
+* **orders:** read Amazon, Walmart and AliExpress order emails from Gmail Takeout ([#43](https://github.com/Shir0o/Budget/issues/43)) ([571c376](https://github.com/Shir0o/Budget/commit/571c376cd41b8503fb3be1159ce507cffa7cb69c))
+
+
+### Bug Fixes
+
+* **mcp:** drop the cross-request queue and push writes without a second pull ([#41](https://github.com/Shir0o/Budget/issues/41)) ([1c7e649](https://github.com/Shir0o/Budget/commit/1c7e649b725a50296669fc9ff2fa44aaa40fd6b1))
+
 ## [1.5.0](https://github.com/Shir0o/Budget/compare/v1.4.0...v1.5.0) (2026-11-28)
 
 
