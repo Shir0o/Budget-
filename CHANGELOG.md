@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/Shir0o/Budget/compare/v1.4.0...v1.5.0) (2026-11-28)
+
+
+### Features
+
+* **mcp:** retag_line changes a Reviewed line's business status ([#37](https://github.com/Shir0o/Budget/issues/37)) ([9f610ff](https://github.com/Shir0o/Budget/commit/9f610ffb3aa0582918a13f7f6216ef491a20d95f))
+* **mcp:** split_line splits a line into parts on request ([#40](https://github.com/Shir0o/Budget/issues/40)) ([c220790](https://github.com/Shir0o/Budget/commit/c220790d3978768bdbc6088a43b17faabf060035))
+
+
+### Bug Fixes
+
+* **mcp:** run one budget call at a time per Worker isolate ([#39](https://github.com/Shir0o/Budget/issues/39)) ([bb141df](https://github.com/Shir0o/Budget/commit/bb141dfce5d1f5e0610d03d3d52abf0f2b0e345a))
+
 ## [1.4.0](https://github.com/Shir0o/Budget/compare/v1.3.0...v1.4.0) (2026-11-28)
 
 
