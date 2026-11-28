@@ -23,9 +23,18 @@ function config(env: Env) {
   };
 }
 
+// One call at a time per isolate. Each call holds the whole replayed budget
+// in memory (a write of a few thousand transactions peaks near 70 MB), and
+// requests that share an isolate share its 128 MB, so two writes at once
+// could end with Cloudflare stopping the isolate and answering 502 or 503.
+let queue: Promise<unknown> = Promise.resolve();
+
 async function ask<T>(request: Record<string, unknown>): Promise<T> {
-  if (!globalThis.budgetMcp) throw new Error("The budget code isn't built: run npm run build:dart.");
-  return JSON.parse(await globalThis.budgetMcp(JSON.stringify(request))) as T;
+  const budgetMcp = globalThis.budgetMcp;
+  if (!budgetMcp) throw new Error("The budget code isn't built: run npm run build:dart.");
+  const answer = queue.then(() => budgetMcp(JSON.stringify(request)));
+  queue = answer.catch(() => undefined);
+  return JSON.parse(await answer) as T;
 }
 
 export async function listTools(env: Env): Promise<McpTool[]> {
