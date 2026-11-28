@@ -14,7 +14,8 @@ import 'ynab_export.dart' show readCsv;
 /// The stores whose bank lines can carry item names.
 enum Store {
   amazon('Amazon', ['amazon', 'amzn']),
-  walmart('Walmart', ['walmart', 'walmrt', 'walmart.com', 'wmsupercenter']);
+  walmart('Walmart', ['walmart', 'walmrt', 'walmart.com', 'wmsupercenter']),
+  aliExpress('AliExpress', ['aliexpress', 'alipay']);
 
   const Store(this.label, this._payeeWords);
 
@@ -47,7 +48,8 @@ final class StoreCharge {
     required this.orderId,
     required this.date,
     required this.items,
-  });
+    Money? total,
+  }) : _total = total; // ignore: prefer_initializing_formals
 
   final Store store;
   final String orderId;
@@ -57,9 +59,20 @@ final class StoreCharge {
   final CivilDate date;
   final List<StoreItem> items;
 
-  /// What the charge comes to, positive.
-  Money get total =>
+  final Money? _total;
+
+  /// What the charge comes to, positive: the total the store gave (an order
+  /// email's grand total, with tax and shipping), else its items' sum.
+  Money get total => _total ?? itemSum;
+
+  /// What the items add up to.
+  Money get itemSum =>
       items.fold(Money.zero, (total, item) => total + item.amount);
+
+  /// Whether the items can become split lines: each has a price and they add
+  /// up to the charge.
+  bool get itemsSumToTotal =>
+      items.every((item) => item.amount.isPositive) && itemSum == total;
 }
 
 /// An order history file that couldn't be read.
@@ -188,6 +201,21 @@ final class StoreMatch {
         : '${text.substring(0, maxLength - 1)}…';
   }
 
+  /// Whether the names are already in the transaction's memo.
+  bool get applied {
+    final memo = transaction.memo;
+    return memo.isNotEmpty && memo.contains(this.memo());
+  }
+
+  /// Whether the bank line can become one line per item: it's a single
+  /// Unreviewed line and the items have prices that add up to it. A Reviewed
+  /// line only takes the names in its memo, so nothing a person reviewed
+  /// changes (ADR 0003).
+  bool get canSplit =>
+      transaction.lines.length == 1 &&
+      !transaction.lines.single.reviewed &&
+      charge.itemsSumToTotal;
+
   /// One Unreviewed line per item, its name as the line memo, for an
   /// [EditTransaction] that splits the bank line. The lines sum to the
   /// line's amount because the charge matched it exactly.
@@ -201,8 +229,8 @@ final class StoreMatch {
   ];
 }
 
-/// Pairs bank lines in [state] with [charges]: an outflow that still has an
-/// Unreviewed line, isn't a transfer, has the store's payee and exactly the
+/// Pairs bank lines in [state] with [charges]: an outflow that isn't a
+/// transfer, doesn't already carry the names, has the store's payee and exactly the
 /// charge's total, dated from [storeMatchDaysBefore] before to
 /// [storeMatchDaysAfter] after it. Each line and each order matches at most
 /// once, the closest date first. A match is only an offer: a person applies
@@ -215,7 +243,6 @@ List<StoreMatch> matchStoreOrders(
     for (final transaction in state.transactions)
       if (transaction.amount.isNegative &&
           !transaction.isTransfer &&
-          transaction.lines.any((line) => !line.reviewed) &&
           charges.any((c) => c.store.matchesPayee(transaction.payee)))
         transaction,
   ];
@@ -241,7 +268,8 @@ List<StoreMatch> matchStoreOrders(
     }
     usedLines.add(transaction.id);
     usedCharges.add(charge);
-    matches.add(StoreMatch(transaction: transaction, charge: charge));
+    final match = StoreMatch(transaction: transaction, charge: charge);
+    if (!match.applied) matches.add(match);
   }
   return matches;
 }

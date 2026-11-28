@@ -67,7 +67,60 @@ Transaction _line(BudgetEngine engine) => engine.state.transactions.singleWhere(
   (t) => t.payee == 'WALMART SUPERCENTER',
 );
 
+/// A Walmart order email in a Takeout mbox, made up.
+const _mbox = '''
+From 1800000000000000000@xxx Fri Nov 06 17:00:00 +0000 2026
+From: Walmart <help@walmart.com>
+Subject: Thanks for your order, Sam
+Date: Thu, 5 Nov 2026 17:00:00 +0000
+Content-Type: text/html; charset=UTF-8
+
+<p>Order number:</p><p>#2000000-22222222</p>
+<img alt="quantity 1 item Sample Paper Towels">
+<p>Order total</p><p>\$14.00</p>
+''';
+
 void main() {
+  testWidgets('order emails add names to a Reviewed line', (tester) async {
+    final engine = _engine();
+    final line = _line(engine);
+    final group =
+        (engine.execute(
+              const CreateCategoryGroup(name: 'Everyday'),
+            ) as Accepted).events.single.payload['categoryGroupId']
+            as String;
+    final category =
+        (engine.execute(
+              CreateCategory(groupId: group, name: 'Home'),
+            ) as Accepted).events.single.payload['categoryId']
+            as String;
+    engine.execute(
+      ReviewLine(
+        transactionId: line.id,
+        lineId: line.lines.single.id,
+        category: category,
+        business: const Personal(),
+      ),
+    );
+    final services = AppServices.inMemory();
+    (services.loader as InMemoryFileLoader).next = Uint8List.fromList(
+      latin1.encode(_mbox),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StoreOrdersScreen(engine: engine, services: services),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('store-choose-emails')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('store-split')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('store-add-names')));
+    await tester.pumpAndSettle();
+    final edited = _line(engine);
+    expect(edited.memo, 'Sample Paper Towels');
+    expect(edited.lines.single.reviewed, isTrue);
+  });
+
   testWidgets('splitting a matched order keeps every line unreviewed', (
     tester,
   ) async {
