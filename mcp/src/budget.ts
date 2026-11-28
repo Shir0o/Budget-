@@ -23,18 +23,13 @@ function config(env: Env) {
   };
 }
 
-// One call at a time per isolate. Each call holds the whole replayed budget
-// in memory (a write of a few thousand transactions peaks near 70 MB), and
-// requests that share an isolate share its 128 MB, so two writes at once
-// could end with Cloudflare stopping the isolate and answering 502 or 503.
-let queue: Promise<unknown> = Promise.resolve();
-
+// No state is shared between requests: a Worker can't settle a promise made
+// in one request from another, so a queue across calls would leave every
+// later call in the isolate waiting forever once one request is cut off.
 async function ask<T>(request: Record<string, unknown>): Promise<T> {
   const budgetMcp = globalThis.budgetMcp;
   if (!budgetMcp) throw new Error("The budget code isn't built: run npm run build:dart.");
-  const answer = queue.then(() => budgetMcp(JSON.stringify(request)));
-  queue = answer.catch(() => undefined);
-  return JSON.parse(await answer) as T;
+  return JSON.parse(await budgetMcp(JSON.stringify(request))) as T;
 }
 
 export async function listTools(env: Env): Promise<McpTool[]> {

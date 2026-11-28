@@ -182,31 +182,27 @@ final class CloudMcp {
   }
 
   /// Uploads this server's new Events to its own folder. Returns why it
-  /// failed, or null.
+  /// failed, or null. It doesn't pull again: the call just read every
+  /// folder, and a Worker has no memory to spare for a second copy.
   Future<String?> _push(
     EventLog log,
     PairingPayload pairing,
     List<Event> before,
   ) async {
-    final own = before.where((e) => e.deviceId == config.deviceId).length;
-    final engine = BudgetEngine(
-      log: log,
+    final had = before.where((e) => e.deviceId == config.deviceId).length;
+    final own = [
+      for (final event in log.readAll())
+        if (event.deviceId == config.deviceId) event,
+    ];
+    return SyncClient(drive: drive, snapshotEvery: 0).push(
+      budgetId: pairing.budgetId,
       deviceId: config.deviceId,
-      actor: Actor.fromValue('mcp:cloud'),
-      nowMs: nowMs,
-    );
-    final outcome = await SyncClient(drive: drive, snapshotEvery: 0).sync(
-      engine: engine,
+      events: own.sublist(had),
+      afterSeq: await _latestSeq(pairing.budgetId),
+      eventCount: own.length,
       key: pairing.key,
-      book: SyncBook(
-        enabled: true,
-        uploadedEvents: own,
-        uploadedSeq: await _latestSeq(pairing.budgetId),
-        snapshottedEvents: own,
-      ),
       platform: cloudPlatform,
     );
-    return outcome.error;
   }
 
   /// The highest segment number in this server's own folder, 0 when it has

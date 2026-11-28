@@ -251,6 +251,67 @@ final class SyncClient {
     }
   }
 
+  /// Writes [events], new Events of [deviceId] alone, into that device's
+  /// own folder as segments numbered after [afterSeq], then its manifest
+  /// counting [eventCount] Events in all. Unlike [sync] it pulls nothing:
+  /// it is for a device that has just read every folder, such as the cloud
+  /// MCP server, which can't hold the budget in memory twice. Returns what
+  /// went wrong, or null.
+  Future<String?> push({
+    required String budgetId,
+    required String deviceId,
+    required List<Event> events,
+    required int afterSeq,
+    required int eventCount,
+    required BudgetKey key,
+    String platform = 'android',
+  }) async {
+    if (events.any((event) => event.deviceId != deviceId)) {
+      throw ArgumentError.value(events, 'events', 'Only $deviceId’s own');
+    }
+    try {
+      final budgetFolder = await _folder(budgetId, null);
+      final myFolder = await _folder(deviceId, budgetFolder);
+      var seq = afterSeq;
+      for (var start = 0; start < events.length; start += Segment.maxEvents) {
+        final segment = Segment(
+          budgetId: budgetId,
+          deviceId: deviceId,
+          seq: ++seq,
+          events: events.sublist(
+            start,
+            min(start + Segment.maxEvents, events.length),
+          ),
+        );
+        await _write(
+          budgetId,
+          deviceId,
+          myFolder,
+          segment.name,
+          segment.toJson(),
+          key,
+        );
+      }
+      await _writeManifest(
+        myFolder,
+        DeviceManifest(
+          deviceId: deviceId,
+          platform: platform,
+          latestSeq: seq,
+          eventCount: eventCount,
+          updatedMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+        budgetId,
+        key,
+      );
+      return null;
+    } on DriveException catch (error) {
+      return error.message;
+    } on SyncException catch (error) {
+      return error.message;
+    }
+  }
+
   /// A run that stopped, keeping the book as it was.
   SyncOutcome _failed(SyncBook book, String message) => SyncOutcome(
     book: book,

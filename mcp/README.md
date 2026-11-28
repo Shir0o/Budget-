@@ -18,7 +18,7 @@ Every change shows in the app's Change History as `Cloud · mcp:<client name>` a
 ## Costs and limits
 
 - **Workers Paid** (US$5 a month at the time of writing) is needed: each call replays the whole history, which takes about 1.5 s of CPU for a made-up budget of 10,000 transactions and about 3 s for a write. The free plan allows 10 ms.
-- A Worker isolate has 128 MB of memory, and each call replays the whole budget into it (a write of a few thousand transactions peaks near 70 MB). The server runs one call at a time per isolate, so calls an AI app sends together wait their turn instead of failing with 502 or 503.
+- A Worker has 128 MB of memory, and each call replays the whole budget into it. A write uploads only the new change instead of reading Drive a second time, so it needs little more memory than a read. An AI app should still send writes one at a time.
 - Answers are as fresh as the last sync from your phone or Mac.
 
 ## Set up
