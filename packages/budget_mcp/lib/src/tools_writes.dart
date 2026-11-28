@@ -348,6 +348,27 @@ final writeTools = <WriteTool>[
     build: _suggestReview,
   ),
   WriteTool(
+    name: 'retag_line',
+    description:
+        'Changes a line’s Personal or Business status and Business Tag, and a '
+        'gift’s recipient, when the person asks for it. It works on a '
+        'Reviewed line, which stays Reviewed; the Category stays as it is. A '
+        'gift on a Reviewed line needs a recipient.',
+    arguments: {
+      'budgetId': BudgetTools._budgetId,
+      'transactionId': {'type': 'string'},
+      'lineId': {'type': 'string'},
+      'business': {
+        'type': 'string',
+        'enum': ['personal', 'business'],
+      },
+      'businessTag': {'type': 'string'},
+      'recipient': {'type': 'string', 'description': 'For a gift line.'},
+    },
+    required: ['budgetId', 'transactionId', 'lineId', 'business'],
+    build: _retagLine,
+  ),
+  WriteTool(
     name: 'mark_imported_reviewed',
     description:
         'Marks Reviewed, as one change, every Unreviewed line that a one-time '
@@ -516,6 +537,15 @@ Command _suggestReview(ToolRequest request, CalendarMonth thisMonth) =>
       recipient: request.text('recipient'),
     );
 
+Command _retagLine(ToolRequest request, CalendarMonth thisMonth) => RetagLine(
+  transactionId: request.requireString('transactionId'),
+  lineId: request.requireString('lineId'),
+  business:
+      _business(request) ??
+      (throw const _Refusal('“business” must be personal or business.')),
+  recipient: request.text('recipient'),
+);
+
 Command _revertChange(ToolRequest request, CalendarMonth thisMonth) =>
     RevertGroup(groupId: request.requireString('groupId'));
 
@@ -596,9 +626,10 @@ String _rejection(Rejection reason) => switch (reason) {
   Rejection.unknownLine => 'That transaction has no such line.',
   Rejection.unknownSchedule => 'No Scheduled Transaction with that id.',
   Rejection.alreadyReviewed =>
-    'That line is already Reviewed. Change it in the app.',
+    'That line is already Reviewed. To change its business status, use '
+        'retag_line; anything else, change in the app.',
   Rejection.transferNotReviewable =>
-    'A transfer line has nothing to suggest: a transfer isn’t spending.',
+    'A transfer line has no business status: a transfer isn’t spending.',
   Rejection.personRequired =>
     'Only a person marks a line Reviewed. Use suggest_review instead.',
   Rejection.noChange => _noChange,
@@ -616,6 +647,7 @@ String _rejection(Rejection reason) => switch (reason) {
   Rejection.businessTagRequired =>
     '“business” needs a “businessTag”. Give the tag the line reports under.',
   Rejection.categoryRequired => 'A Category is required.',
+  Rejection.recipientRequired => 'A gift needs a “recipient”: who received it.',
   Rejection.scheduleCategoryRequired =>
     'Income needs readyToAssign as its Category, and an outflow a Category.',
   Rejection.targetAmountMustBePositive => 'The Target must be more than zero.',

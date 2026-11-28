@@ -288,6 +288,9 @@ CommandResult _decide(Command command, BudgetState state, _Stamp stamp) {
     case SuggestReview():
       return _suggestReview(command, state, stamp);
 
+    case RetagLine():
+      return _retagLine(command, state, stamp);
+
     case MarkImportedReviewed():
       return _markImportedReviewed(state, stamp);
 
@@ -812,6 +815,72 @@ CommandResult _suggestReview(
       'lines': [
         for (final other in transaction.lines)
           stored(other.id == line.id ? suggested : other),
+      ],
+    }),
+  ]);
+}
+
+/// Changes a line's business status, keeping its Category and Review state
+/// (ADR 0003, amended).
+CommandResult _retagLine(RetagLine command, BudgetState state, _Stamp stamp) {
+  final transaction = state.transaction(command.transactionId);
+  if (transaction == null) {
+    return const Rejected(Rejection.unknownTransaction);
+  }
+  if (transaction.isTransfer) {
+    return const Rejected(Rejection.transferNotReviewable);
+  }
+  final line = transaction.lines
+      .where((line) => line.id == command.lineId)
+      .firstOrNull;
+  if (line == null) return const Rejected(Rejection.unknownLine);
+  final business = switch (command.business) {
+    Business(:final tag) => Business(tag.trim()),
+    final other => other,
+  };
+  if (business case Business(:final tag) when tag.isEmpty) {
+    return const Rejected(Rejection.businessTagRequired);
+  }
+  final recipient = business == const Business(giftsTag)
+      ? switch ((command.recipient ?? line.recipient)?.trim()) {
+          '' => null,
+          final recipient => recipient,
+        }
+      : null;
+  if (line.reviewed &&
+      reviewNeed(
+            category: line.category,
+            business: business,
+            recipient: recipient,
+          ) ==
+          ReviewNeed.recipient) {
+    return const Rejected(Rejection.recipientRequired);
+  }
+  if (_checkText([recipient]) case final rejected?) return rejected;
+  if (business == line.business && recipient == line.recipient) {
+    return const Rejected(Rejection.noChange);
+  }
+  final retagged = TransactionLine(
+    id: line.id,
+    amount: line.amount,
+    category: line.category,
+    business: business,
+    memo: line.memo,
+    recipient: recipient,
+    note: line.note,
+    reviewed: line.reviewed,
+  );
+  Map<String, Object?> stored(TransactionLine line) => {
+    ..._storedLine(line),
+    'note': ?line.note,
+  };
+  return Accepted([
+    stamp.event(EventType.transactionSplitSet, {
+      'transactionId': transaction.id,
+      'amountCents': transaction.amount.cents,
+      'lines': [
+        for (final other in transaction.lines)
+          stored(other.id == line.id ? retagged : other),
       ],
     }),
   ]);

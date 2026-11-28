@@ -14,6 +14,8 @@ Nothing assigns a category or business status without a person's tap. The app ma
 
 **Amended again 2026-11-28:** for a budget imported before that change, the MCP write tool `mark_imported_reviewed` (offered only in read-write mode, and on the cloud server only when `MCP_WRITE_TOOLS` names it) marks Reviewed, as one revertable change, the Unreviewed lines a one-time import created that need nothing more. It never touches lines from bank sync, schedules, MCP or a person, nor imported lines that still need a Category, Personal or Business, a Business Tag or a gift's recipient.
 
+**Amended a third time 2026-11-28:** the MCP write tool `retag_line` (offered only in read-write mode, and on the cloud server only when `MCP_WRITE_TOOLS` names it) changes one line's business status, and a gift's recipient, when the person asks for it in an AI chat. It never changes a Category and never changes whether a line is Reviewed: a Reviewed line stays Reviewed, because the person chose the new value, and an Unreviewed one still waits for their tap. A Reviewed line can't be left needing something, so a gift on one needs a recipient. Each retag is one change in Change History that the person can revert.
+
 ## Consequences
 
 - More taps per transaction. This is by design: review is part of the product.

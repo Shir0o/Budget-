@@ -809,4 +809,100 @@ void main() {
       );
     });
   });
+
+  group('RetagLine (ADR 0003, amended)', () {
+    RetagLine retag(
+      _Budget budget,
+      String id,
+      BusinessStatus business, {
+      String? recipient,
+    }) => RetagLine(
+      transactionId: id,
+      lineId: budget.line(id).id,
+      business: business,
+      recipient: recipient,
+    );
+
+    test('changes a Reviewed line, which stays Reviewed', () {
+      final budget = _Budget();
+      final id = budget.spend(
+        2561,
+        category: budget.diningOut,
+        business: const Business('Other business expense'),
+      );
+      expect(budget.line(id).reviewed, isTrue);
+
+      budget.run(
+        retag(budget, id, const Business(' Meals ')),
+        const Actor.fromValue('mcp:test'),
+      );
+
+      final line = budget.line(id);
+      expect(line.business, const Business('Meals'));
+      expect(line.category, budget.diningOut);
+      expect(line.reviewed, isTrue);
+      expect(budget.state.reviewQueue, isEmpty);
+    });
+
+    test('leaves an Unreviewed line Unreviewed', () {
+      final budget = _Budget();
+      final id = budget.spend(2561, actor: Actor.bankSync);
+
+      budget.run(
+        retag(budget, id, const Personal()),
+        const Actor.fromValue('mcp:test'),
+      );
+
+      expect(budget.line(id).business, const Personal());
+      expect(budget.line(id).reviewed, isFalse);
+    });
+
+    test('a gift on a Reviewed line needs a recipient', () {
+      final budget = _Budget();
+      final id = budget.spend(
+        2000,
+        category: budget.diningOut,
+        business: const Personal(),
+      );
+
+      expect(
+        budget.execute(retag(budget, id, const Business(giftsTag))),
+        isA<Rejected>().having(
+          (r) => r.reason,
+          'reason',
+          Rejection.recipientRequired,
+        ),
+      );
+      budget.run(retag(budget, id, const Business(giftsTag), recipient: 'Sam'));
+      expect(budget.line(id).recipient, 'Sam');
+      expect(budget.line(id).reviewed, isTrue);
+
+      // Leaving Gifts drops the recipient.
+      budget.run(retag(budget, id, const Personal()));
+      expect(budget.line(id).recipient, isNull);
+    });
+
+    test('refuses a transfer, an empty tag and no change', () {
+      final budget = _Budget();
+      final savings = budget.addAccount('Savings', AccountType.savings);
+      final transfer = budget.transfer(savings, 1000, actor: Actor.userAndroid);
+      final id = budget.spend(
+        500,
+        category: budget.diningOut,
+        business: const Personal(),
+      );
+
+      Rejection reason(Command command) =>
+          (budget.execute(command) as Rejected).reason;
+      expect(
+        reason(retag(budget, transfer, const Personal())),
+        Rejection.transferNotReviewable,
+      );
+      expect(
+        reason(retag(budget, id, const Business(' '))),
+        Rejection.businessTagRequired,
+      );
+      expect(reason(retag(budget, id, const Personal())), Rejection.noChange);
+    });
+  });
 }
