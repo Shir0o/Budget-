@@ -14,6 +14,8 @@ export interface Env {
   MCP_MODE?: string;
   /** Write tools offered in read-write mode, comma-separated. */
   MCP_WRITE_TOOLS?: string;
+  /** How many days back the daily order-email check looks: 1 to 30, 3 by default. */
+  ORDER_EMAIL_DAYS?: string;
 
   /** Secret: the code from Encrypted sync › Pair a device in the app. */
   BUDGET_PAIRING_CODE: string;
@@ -23,6 +25,11 @@ export interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GOOGLE_REFRESH_TOKEN: string;
+  /**
+   * Optional secret: a refresh token from the same Google client for
+   * gmail.readonly. Set, the daily check reads new order emails.
+   */
+  GMAIL_REFRESH_TOKEN?: string;
 
   /** Set by OAuthProvider for the default handler. */
   OAUTH_PROVIDER: OAuthHelpers;

@@ -61,6 +61,50 @@ final class StoreCharge {
 
   final Money? _total;
 
+  /// The charge as JSON, for the order offers a cloud server leaves in
+  /// Drive.
+  Map<String, Object?> toJson() => {
+    'store': store.name,
+    'orderId': orderId,
+    'date': date.toIso(),
+    'totalCents': total.cents,
+    'items': [
+      for (final item in items)
+        {'name': item.name, 'amountCents': item.amount.cents},
+    ],
+  };
+
+  /// Reads [toJson]'s output; null when it isn't a charge this version
+  /// knows, such as a store added later.
+  static StoreCharge? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final store = Store.values
+        .where((s) => s.name == json['store'])
+        .firstOrNull;
+    final date = _isoDate(json['date']);
+    final total = json['totalCents'];
+    final items = json['items'];
+    if (store == null || date == null || total is! int || items is! List) {
+      return null;
+    }
+    return StoreCharge(
+      store: store,
+      orderId: '${json['orderId'] ?? ''}',
+      date: date,
+      total: Money(total),
+      items: [
+        for (final item in items)
+          if (item is Map &&
+              item['name'] is String &&
+              item['amountCents'] is int)
+            StoreItem(
+              name: item['name'] as String,
+              amount: Money(item['amountCents'] as int),
+            ),
+      ],
+    );
+  }
+
   /// What the charge comes to, positive: the total the store gave (an order
   /// email's grand total, with tax and shipping), else its items' sum.
   Money get total => _total ?? itemSum;
@@ -332,4 +376,15 @@ CivilDate? _date(String text) {
     return null;
   }
   return null;
+}
+
+CivilDate? _isoDate(Object? value) {
+  if (value is! String) return null;
+  try {
+    return CivilDate.parse(value);
+  } on FormatException {
+    return null;
+  } on ArgumentError {
+    return null;
+  }
 }

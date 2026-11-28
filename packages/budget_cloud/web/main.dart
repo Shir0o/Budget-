@@ -69,24 +69,31 @@ final class _Token implements DriveAccess {
 
 /// One request from the Worker, as JSON:
 /// `{config: {pairingCode, mode, writeTools, deviceId}, accessToken,
-/// method: "list" | "call", name, arguments, client}`. Answers
-/// `{tools: [...]}` for list and `{text, isError}` for call.
+/// method: "list" | "call" | "orders", name, arguments, client, messages}`.
+/// Answers `{tools: [...]}` for list and `{text, isError}` for call and for
+/// orders, the daily check of order emails (each message one raw email).
 Future<String> _handle(String json) async {
   try {
     final request = (jsonDecode(json) as Map).cast<String, Object?>();
     final config = (request['config'] as Map).cast<String, Object?>();
-    final cloud = CloudMcp(
-      drive: GoogleDriveAppData(
-        transport: _FetchTransport(),
-        access: _Token(request['accessToken'] as String? ?? ''),
-      ),
-      config: CloudConfig.parse(
-        pairingCode: config['pairingCode'] as String? ?? '',
-        mode: config['mode'] as String?,
-        writeTools: config['writeTools'] as String?,
-        deviceId: config['deviceId'] as String?,
-      ),
+    final drive = GoogleDriveAppData(
+      transport: _FetchTransport(),
+      access: _Token(request['accessToken'] as String? ?? ''),
     );
+    final cloudConfig = CloudConfig.parse(
+      pairingCode: config['pairingCode'] as String? ?? '',
+      mode: config['mode'] as String?,
+      writeTools: config['writeTools'] as String?,
+      deviceId: config['deviceId'] as String?,
+    );
+    if (request['method'] == 'orders') {
+      final result = await OrderCheck(drive: drive, config: cloudConfig).run([
+        for (final message in request['messages'] as List? ?? const [])
+          if (message is String) message,
+      ]);
+      return jsonEncode({'text': result.text, 'isError': result.isError});
+    }
+    final cloud = CloudMcp(drive: drive, config: cloudConfig);
     if (request['method'] == 'list') {
       return jsonEncode({'tools': cloud.toolList});
     }

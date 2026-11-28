@@ -3,3 +3,4 @@
 library;
 
 export 'src/cloud_mcp.dart';
+export 'src/order_check.dart';
